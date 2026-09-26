@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -39,6 +40,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -168,6 +170,35 @@ fun SettingsScreen(
                 checked = uiState.isDebugLogEnabled,
                 onCheckedChange = { viewModel.setDebugLogEnabled(context, it) }
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = uiState.serverUrl,
+                onValueChange = { viewModel.onServerUrlChange(it) },
+                label = { Text(stringResource(id = R.string.server_url)) },
+                placeholder = { Text(stringResource(id = R.string.login_server_url_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                isError = uiState.serverUrlError != null,
+                supportingText = {
+                    Text(
+                        uiState.serverUrlError
+                            ?: if (uiState.serverUrlSaved) {
+                                stringResource(id = R.string.settings_server_url_saved)
+                            } else {
+                                stringResource(id = R.string.settings_server_url_help)
+                            }
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
+            )
+
+            Button(
+                onClick = { viewModel.saveServerUrl(context) },
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                Text(stringResource(id = R.string.settings_save_server_url))
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

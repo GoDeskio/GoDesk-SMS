@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Trust the system CA store and any user-installed CA.
+  Android ignores user CAs unless they are listed here, which is what lets a
+  LAN server using a private or self-signed CA work after the CA is installed
+  on the phone. No certificate is bundled unless the with_ca template is used.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

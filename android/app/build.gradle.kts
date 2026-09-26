@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
@@ -8,6 +11,47 @@ plugins {
 val gitHash = providers.exec {
     commandLine("git", "rev-parse", "--short", "HEAD")
 }.standardOutput.asText.map { it.trim() }
+
+// Network-security XML is generated so a build can optionally bundle a private
+// CA without committing the certificate. Templates live in network-security/.
+val generatedNetworkSecurityDir = layout.buildDirectory.dir("generated/res/networkSecurity")
+val networkSecurityTemplates = layout.projectDirectory.dir("network-security")
+
+val generateNetworkSecurityConfig = tasks.register("generateNetworkSecurityConfig") {
+    inputs.dir(networkSecurityTemplates)
+    val caFileEnv = providers.environmentVariable("ANDROID_PRIVATE_CA_FILE").orElse("")
+    val caB64Env = providers.environmentVariable("ANDROID_PRIVATE_CA_BASE64").orElse("")
+    inputs.property("privateCaFile", caFileEnv)
+    // Track presence only so the certificate bytes are not stored in the build cache key as a loggable property name collision.
+    inputs.property("privateCaProvided", caB64Env.map { if (it.isBlank()) "absent" else "present" })
+    outputs.dir(generatedNetworkSecurityDir)
+
+    doLast {
+        val output = generatedNetworkSecurityDir.get().asFile
+        val xmlDir = output.resolve("xml")
+        val rawDir = output.resolve("raw")
+        xmlDir.mkdirs()
+
+        val certBytes = readOptionalPrivateCa(caFileEnv.get(), caB64Env.get(), project.projectDir)
+        val templateName = if (certBytes == null) {
+            "network_security_config.xml"
+        } else {
+            rawDir.mkdirs()
+            rawDir.resolve("private_ca.crt").writeBytes(certBytes)
+            "network_security_config.with_ca.xml"
+        }
+        val template = networkSecurityTemplates.file(templateName).asFile
+        xmlDir.resolve("network_security_config.xml").writeText(template.readText())
+    }
+}
+
+android.sourceSets.named("main") {
+    res.directories.add(generatedNetworkSecurityDir.get().asFile.path)
+}
+
+tasks.named("preBuild").configure {
+    dependsOn(generateNetworkSecurityConfig)
+}
 
 android {
     compileSdk = 37
@@ -21,6 +65,27 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val releaseKeystoreFile = providers.environmentVariable("ANDROID_KEYSTORE_FILE").orNull
+    val releaseKeystorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
+    val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
+    val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+    val hasReleaseKeystore = !releaseKeystoreFile.isNullOrBlank() &&
+        !releaseKeystorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank() &&
+        project.file(releaseKeystoreFile).isFile
+
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = project.file(releaseKeystoreFile!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["sentryEnvironment"] = "development"
@@ -29,6 +94,13 @@ android {
             manifestPlaceholders["sentryEnvironment"] = "production"
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // Release keystore secrets are optional. Without them the APK is still a
+            // release build, signed with the debug key so it can be installed for LAN testing.
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
     compileOptions {
@@ -76,4 +148,23 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
+}
+
+private fun readOptionalPrivateCa(caFile: String, caBase64: String, projectDir: File): ByteArray? {
+    if (caBase64.isNotBlank()) {
+        return try {
+            Base64.getDecoder().decode(caBase64.trim())
+        } catch (error: IllegalArgumentException) {
+            throw org.gradle.api.GradleException("ANDROID_PRIVATE_CA_BASE64 is not valid base64", error)
+        }
+    }
+    if (caFile.isBlank()) {
+        return null
+    }
+    val candidate = File(caFile)
+    val resolved = if (candidate.isAbsolute) candidate else File(projectDir, caFile)
+    if (!resolved.isFile) {
+        throw org.gradle.api.GradleException("ANDROID_PRIVATE_CA_FILE does not exist: $caFile")
+    }
+    return resolved.readBytes()
 }

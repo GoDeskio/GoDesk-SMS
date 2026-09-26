@@ -1,0 +1,26 @@
+{
+  "project_info": {
+    "project_number": "000000000000",
+    "project_id": "replace-me",
+    "storage_bucket": "replace-me.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:000000000000:android:replace-me",
+        "android_client_info": {
+          "package_name": "com.httpsms"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "REPLACE_ME"
+        }
+      ],
+      "services": {
+        "appinvite_service": {}
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

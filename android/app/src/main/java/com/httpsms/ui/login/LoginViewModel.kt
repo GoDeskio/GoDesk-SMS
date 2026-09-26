@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.httpsms.Constants
 import com.httpsms.HttpSmsApiService
+import com.httpsms.ServerUrls
 import com.httpsms.Settings
 import com.httpsms.SmsManagerService
 import com.httpsms.validators.PhoneNumberValidator

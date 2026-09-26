@@ -19,7 +19,10 @@ data class SettingsUiState(
     val isActiveSIM2: Boolean = false,
     val isIncomingCallEventsSIM2Enabled: Boolean = false,
     val encryptionKey: String = "",
-    val isEncryptReceivedMessagesEnabled: Boolean = false
+    val isEncryptReceivedMessagesEnabled: Boolean = false,
+    val serverUrl: String = "",
+    val serverUrlError: String? = null,
+    val serverUrlSaved: Boolean = false
 )
 
 class SettingsViewModel : ViewModel() {
@@ -39,8 +42,27 @@ class SettingsViewModel : ViewModel() {
             isActiveSIM2 = Settings.getActiveStatus(context, Constants.SIM2),
             isIncomingCallEventsSIM2Enabled = Settings.isIncomingCallEventsEnabled(context, Constants.SIM2),
             encryptionKey = Settings.getEncryptionKey(context) ?: "",
-            isEncryptReceivedMessagesEnabled = Settings.encryptReceivedMessages(context)
+            isEncryptReceivedMessagesEnabled = Settings.encryptReceivedMessages(context),
+            serverUrl = Settings.getServerUrl(context) ?: "",
+            serverUrlSaved = !Settings.getServerUrl(context).isNullOrBlank()
         )
+    }
+
+    fun onServerUrlChange(value: String) {
+        _uiState.value = _uiState.value.copy(serverUrl = value, serverUrlError = null, serverUrlSaved = false)
+    }
+
+    fun saveServerUrl(context: Context) {
+        val normalized = ServerUrls.normalize(_uiState.value.serverUrl)
+        if (normalized == null) {
+            _uiState.value = _uiState.value.copy(
+                serverUrlError = "Server URL must be an HTTPS origin such as https://sms.example.com",
+                serverUrlSaved = false
+            )
+            return
+        }
+        Settings.setServerUrlAsync(context, normalized)
+        _uiState.value = _uiState.value.copy(serverUrl = normalized, serverUrlError = null, serverUrlSaved = true)
     }
 
     fun setDebugLogEnabled(context: Context, enabled: Boolean) {

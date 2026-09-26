@@ -1,0 +1,102 @@
+name: android
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-apk:
+    name: Release APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Decode google-services.json
+        env:
+          GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON_BASE64}" ]; then
+            echo "::error::Set the GOOGLE_SERVICES_JSON_BASE64 repository secret to the base64 contents of android/app/google-services.json. See docs/android-build.md."
+            exit 1
+          fi
+          printf '%s' "${GOOGLE_SERVICES_JSON_BASE64}" | base64 -d > android/app/google-services.json
+          python3 -c 'import json; json.load(open("android/app/google-services.json"))'
+
+      - name: Decode release keystore
+        id: signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_KEYSTORE_BASE64}" ] && [ -n "${ANDROID_KEYSTORE_PASSWORD}" ] && [ -n "${ANDROID_KEY_ALIAS}" ] && [ -n "${ANDROID_KEY_PASSWORD}" ]; then
+            keystore="${RUNNER_TEMP}/release.keystore"
+            printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > "${keystore}"
+            echo "mode=release" >> "${GITHUB_OUTPUT}"
+            echo "keystore=${keystore}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "Release signing secrets are absent. The APK will be signed with the debug key."
+            echo "mode=debug" >> "${GITHUB_OUTPUT}"
+            echo "keystore=" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Decode optional private CA
+        id: ca
+        env:
+          ANDROID_PRIVATE_CA_BASE64: ${{ secrets.ANDROID_PRIVATE_CA_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ANDROID_PRIVATE_CA_BASE64}" ]; then
+            cert="${RUNNER_TEMP}/private-ca.crt"
+            printf '%s' "${ANDROID_PRIVATE_CA_BASE64}" | base64 -d > "${cert}"
+            echo "file=${cert}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "file=" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Build release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ steps.signing.outputs.keystore }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_PRIVATE_CA_FILE: ${{ steps.ca.outputs.file }}
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --stacktrace --no-daemon
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/*.apk dist/httpsms-release.apk
+          echo "Signing mode: ${{ steps.signing.outputs.mode }}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Package id remains com.httpsms." >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: httpsms-release-apk
+          path: dist/httpsms-release.apk
+          if-no-files-found: error

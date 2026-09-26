@@ -176,7 +176,9 @@ fun LoginScreen(
             placeholder = { Text(stringResource(id = R.string.login_server_url_hint)) },
             modifier = Modifier.fillMaxWidth(),
             isError = uiState.serverUrlError != null,
-            supportingText = uiState.serverUrlError?.let { { Text(it) } },
+            supportingText = {
+                Text(uiState.serverUrlError ?: stringResource(id = R.string.login_server_url_help))
+            },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Uri,
                 imeAction = ImeAction.Done

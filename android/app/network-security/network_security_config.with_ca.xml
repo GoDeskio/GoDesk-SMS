@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Same trust anchors as network_security_config.xml, plus a CA bundled at
+  build time from ANDROID_PRIVATE_CA_BASE64 or ANDROID_PRIVATE_CA_FILE.
+  The certificate itself is never committed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+            <certificates src="@raw/private_ca" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

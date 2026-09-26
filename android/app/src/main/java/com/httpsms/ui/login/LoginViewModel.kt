@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.telephony.SubscriptionManager
 import android.telephony.TelephonyManager
-import android.webkit.URLUtil
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -47,11 +46,12 @@ class LoginViewModel : ViewModel() {
         val phoneNumberSIM1 = Settings.getSIM1PhoneNumber(context)
         val phoneNumberSIM2 = Settings.getSIM2PhoneNumber(context)
         
+        val savedServerUrl = Settings.getServerUrl(context)
         _uiState.value = _uiState.value.copy(
             isDualSim = isDualSim,
             phoneNumberSIM1 = phoneNumberSIM1,
             phoneNumberSIM2 = phoneNumberSIM2,
-            serverUrl = defaultServerUrl
+            serverUrl = if (!savedServerUrl.isNullOrBlank()) savedServerUrl else defaultServerUrl
         )
         
         // Try to auto-detect if fields are empty
@@ -155,25 +155,18 @@ class LoginViewModel : ViewModel() {
                 return@launch
             }
 
-            if (!URLUtil.isValidUrl(serverUrl)) {
+            val normalizedServerUrl = ServerUrls.normalize(serverUrl)
+            if (normalizedServerUrl == null) {
                  _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    serverUrlError = "Server URL [$serverUrl] is invalid"
-                )
-                return@launch
-            }
-
-            if (!URLUtil.isHttpsUrl(serverUrl)) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    serverUrlError = "Server URL [$serverUrl] must be HTTPS"
+                    serverUrlError = "Server URL must be an HTTPS origin such as https://sms.example.com"
                 )
                 return@launch
             }
 
             val authResult = try {
                 withContext(Dispatchers.IO) {
-                    val service = HttpSmsApiService(apiKey, URI(serverUrl))
+                    val service = HttpSmsApiService(apiKey, URI(normalizedServerUrl))
                     val e164Phone1 = PhoneNumberValidator.formatE164(phone1, countryCode)
                     val response1 = service.updateFcmToken(e164Phone1, Constants.SIM1, Settings.getFcmToken(context) ?: "")
                     
@@ -209,7 +202,7 @@ class LoginViewModel : ViewModel() {
 
             // Save settings
             Settings.setApiKeyAsync(context, apiKey)
-            Settings.setServerUrlAsync(context, serverUrl)
+            Settings.setServerUrlAsync(context, normalizedServerUrl)
             Settings.setSIM1PhoneNumber(context, PhoneNumberValidator.formatE164(phone1, countryCode))
             if (currentState.isDualSim) {
                 Settings.setSIM2PhoneNumber(context, PhoneNumberValidator.formatE164(phone2, countryCode))

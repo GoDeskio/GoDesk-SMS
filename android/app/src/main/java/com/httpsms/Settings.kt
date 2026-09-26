@@ -302,7 +302,7 @@ object Settings {
         return URI(urlString)
     }
 
-    private fun getServerUrl(context: Context): String? {
+    fun getServerUrl(context: Context): String? {
         Timber.d(Settings::getServerUrl.name)
 
         val serverUrl = PreferenceManager

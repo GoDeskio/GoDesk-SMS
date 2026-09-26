@@ -3,6 +3,16 @@
 !.env.docker
 !.env.production
 *serviceAccountKey.json
+*firebase-credentials.json
+**/google-services.json
+!android/app/google-services.json.example
+*.keystore
+*.jks
+*.p12
+certs/
+**/private_ca.crt
+**/private-ca.crt
+**/*.pem
 android/app/debug/
 *main.exe*
 android/app/release/

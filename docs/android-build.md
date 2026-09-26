@@ -25,11 +25,12 @@ If any of the four keystore secrets is missing, the workflow still builds a rele
 
 `.github/workflows/android.yml` runs on pushes to `main`, on pull requests, and on manual dispatch.
 
-1. Decodes `GOOGLE_SERVICES_JSON_BASE64` into `android/app/google-services.json`.
-2. Decodes the keystore when all four signing secrets are present.
-3. Decodes `ANDROID_PRIVATE_CA_BASE64` into a temp PEM and passes it as `ANDROID_PRIVATE_CA_FILE`.
-4. Runs `./gradlew assembleRelease`.
-5. Uploads `dist/httpsms-release.apk` as the `httpsms-release-apk` artifact.
+1. Sets up the Android SDK with `android-actions/setup-android@v4`, installing `platform-tools` only. The legacy `tools` package is gone from the SDK repository and fails the older action.
+2. Decodes `GOOGLE_SERVICES_JSON_BASE64` into `android/app/google-services.json`.
+3. Decodes the keystore when all four signing secrets are present.
+4. Decodes `ANDROID_PRIVATE_CA_BASE64` into a temp PEM and passes it as `ANDROID_PRIVATE_CA_FILE`.
+5. Runs `./gradlew assembleRelease`.
+6. Uploads `dist/httpsms-release.apk` as the `httpsms-release-apk` artifact.
 
 Download the artifact from the workflow run. The job summary records whether the APK was release-signed or debug-signed.
 

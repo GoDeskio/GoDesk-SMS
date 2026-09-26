@@ -2,6 +2,11 @@
 .env*
 !.env.docker
 !.env.production
+!.env.example
+certs/
+*.keystore
+*.jks
+*.p12
 *serviceAccountKey.json
 android/app/debug/
 *main.exe*

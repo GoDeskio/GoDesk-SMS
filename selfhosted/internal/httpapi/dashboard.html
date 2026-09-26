@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GoDesk SMS</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body { font-family: sans-serif; margin: 0; background: #f4f6f8; color: #1c1c1c; }
+    header { background: #0f3d32; color: white; padding: 1rem 1.5rem; }
+    main { max-width: 880px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+    section { background: white; border-radius: 8px; padding: 1rem 1.25rem; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+    h1 { font-size: 1.25rem; margin: 0; }
+    h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    label { display: block; font-size: .85rem; margin-top: .6rem; }
+    input, select, button { font: inherit; }
+    input, select { width: 100%; box-sizing: border-box; padding: .45rem .5rem; margin-top: .2rem; }
+    button { margin-top: .8rem; padding: .45rem .8rem; background: #0f3d32; color: white; border: 0; border-radius: 4px; cursor: pointer; }
+    button.secondary { background: #555; }
+    .row { display: flex; gap: .5rem; flex-wrap: wrap; }
+    .error { color: #8d1d1d; }
+    .muted { color: #555; font-size: .9rem; }
+    code { word-break: break-all; }
+    ul { padding-left: 1.1rem; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #121212; color: #eee; }
+      section { background: #1e1e1e; }
+      .muted { color: #aaa; }
+    }
+  </style>
+</head>
+<body>
+  <header><h1>GoDesk SMS</h1></header>
+  <main>
+    <section id="auth">
+      <h2>Account</h2>
+      <p class="muted">Local email and password. No Firebase. The API key is the <code>x-api-key</code> used by httpsms-compatible clients.</p>
+      <div class="row">
+        <div style="flex:1; min-width:240px">
+          <label>Email <input id="email" type="email" autocomplete="username"></label>
+          <label>Password <input id="password" type="password" autocomplete="current-password"></label>
+          <div class="row">
+            <button id="signup" type="button">Sign up</button>
+            <button id="login" class="secondary" type="button">Log in</button>
+          </div>
+        </div>
+      </div>
+      <p id="auth-error" class="error"></p>
+      <p id="session" class="muted" hidden></p>
+    </section>
+    <section id="app" hidden>
+      <h2>Devices</h2>
+      <p class="muted">Register an SMS Gateway for Android phone in local server mode. Use the origin shown in the app, for example <code>https://phone.example:8080</code>.</p>
+      <label>Name <input id="device-name" value="Phone"></label>
+      <label>Phone number <input id="device-phone" placeholder="+18005550199"></label>
+      <label>Gateway URL <input id="device-url" placeholder="https://phone.example:8080"></label>
+      <label>Username <input id="device-user" autocomplete="off"></label>
+      <label>Password <input id="device-pass" type="password" autocomplete="off"></label>
+      <label>Mode
+        <select id="device-mode">
+          <option value="local">local</option>
+          <option value="private">private</option>
+        </select>
+      </label>
+      <button id="add-device" type="button">Register device</button>
+      <ul id="devices"></ul>
+      <h2>Send</h2>
+      <label>From <input id="from" placeholder="+18005550199"></label>
+      <label>To <input id="to" placeholder="+18005550100"></label>
+      <label>Content <input id="content" placeholder="Hello"></label>
+      <button id="send" type="button">Send SMS</button>
+      <h2>Webhook</h2>
+      <label>URL <input id="hook-url" placeholder="https://hooks.example/sms"></label>
+      <label>Signing key (optional) <input id="hook-key" autocomplete="off"></label>
+      <button id="add-hook" type="button">Save webhook</button>
+      <ul id="hooks"></ul>
+      <h2>Messages</h2>
+      <button id="refresh" class="secondary" type="button">Refresh</button>
+      <ul id="messages"></ul>
+      <p id="app-error" class="error"></p>
+    </section>
+  </main>
+  <script>
+    const tokenKey = "godesk_token";
+    const authError = document.querySelector("#auth-error");
+    const appError = document.querySelector("#app-error");
+    const session = document.querySelector("#session");
+
+    function token() { return localStorage.getItem(tokenKey) || ""; }
+
+    async function api(path, options) {
+      const headers = Object.assign({ "Content-Type": "application/json" }, (options && options.headers) || {});
+      if (token()) headers.Authorization = "Bearer " + token();
+      const response = await fetch(path, Object.assign({}, options, { headers }));
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(body.message || response.statusText);
+      }
+      return body;
+    }
+
+    function showSession(user, apiKey) {
+      document.querySelector("#app").hidden = false;
+      session.hidden = false;
+      session.textContent = user.email + " · API key " + apiKey;
+    }
+
+    async function loadAll() {
+      const me = await api("/v1/users/me");
+      showSession(me.data.user, me.data.api_key);
+      const devices = await api("/v1/devices");
+      const list = document.querySelector("#devices");
+      list.replaceChildren();
+      for (const device of devices.data) {
+        const item = document.createElement("li");
+        item.textContent = device.name + " " + device.phone_number + " " + device.mode + " " + device.base_url + " ingest " + device.ingest_url + " webhooks " + device.webhook_registration;
+        list.appendChild(item);
+      }
+      const hooks = await api("/v1/webhooks");
+      const hookList = document.querySelector("#hooks");
+      hookList.replaceChildren();
+      for (const hook of hooks.data) {
+        const item = document.createElement("li");
+        item.textContent = hook.url + " " + hook.events.join(",");
+        hookList.appendChild(item);
+      }
+      const messages = await api("/v1/messages");
+      const messageList = document.querySelector("#messages");
+      messageList.replaceChildren();
+      for (const message of messages.data) {
+        const item = document.createElement("li");
+        item.textContent = message.status + " " + message.type + " " + message.owner + " → " + message.contact + ": " + message.content;
+        messageList.appendChild(item);
+      }
+    }
+
+    async function authenticate(path) {
+      authError.textContent = "";
+      try {
+        const body = await api(path, {
+          method: "POST",
+          body: JSON.stringify({
+            email: document.querySelector("#email").value,
+            password: document.querySelector("#password").value
+          }),
+          headers: {}
+        });
+        localStorage.setItem(tokenKey, body.data.token);
+        await loadAll();
+      } catch (error) {
+        authError.textContent = error.message;
+      }
+    }
+
+    document.querySelector("#signup").onclick = () => authenticate("/v1/auth/signup");
+    document.querySelector("#login").onclick = () => authenticate("/v1/auth/login");
+    document.querySelector("#add-device").onclick = async () => {
+      appError.textContent = "";
+      try {
+        await api("/v1/devices", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.querySelector("#device-name").value,
+            phone_number: document.querySelector("#device-phone").value,
+            base_url: document.querySelector("#device-url").value,
+            username: document.querySelector("#device-user").value,
+            password: document.querySelector("#device-pass").value,
+            mode: document.querySelector("#device-mode").value
+          })
+        });
+        await loadAll();
+      } catch (error) { appError.textContent = error.message; }
+    };
+    document.querySelector("#send").onclick = async () => {
+      appError.textContent = "";
+      try {
+        await api("/v1/messages/send", {
+          method: "POST",
+          body: JSON.stringify({
+            from: document.querySelector("#from").value,
+            to: document.querySelector("#to").value,
+            content: document.querySelector("#content").value
+          })
+        });
+        await loadAll();
+      } catch (error) { appError.textContent = error.message; }
+    };
+    document.querySelector("#add-hook").onclick = async () => {
+      appError.textContent = "";
+      try {
+        await api("/v1/webhooks", {
+          method: "POST",
+          body: JSON.stringify({
+            url: document.querySelector("#hook-url").value,
+            signing_key: document.querySelector("#hook-key").value,
+            events: ["message.phone.received"]
+          })
+        });
+        await loadAll();
+      } catch (error) { appError.textContent = error.message; }
+    };
+    document.querySelector("#refresh").onclick = () => loadAll().catch((error) => { appError.textContent = error.message; });
+
+    const hash = new URLSearchParams(location.hash.replace(/^#/, ""));
+    if (hash.get("token")) {
+      localStorage.setItem(tokenKey, hash.get("token"));
+      history.replaceState(null, "", location.pathname);
+    }
+    if (token()) {
+      loadAll().catch((error) => { authError.textContent = error.message; });
+    }
+  </script>
+</body>
+</html>

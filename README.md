@@ -1,3 +1,48 @@
+# GoDesk SMS
+
+GoDesk SMS is a self-hosted SMS gateway. The phone app for this self-hosted mode is [SMS Gateway for Android](https://github.com/capcom6/android-sms-gateway) (Apache-2.0). The original product in this repository is [httpSMS](https://github.com/NdoleStudio/httpsms) by Ndole Studio, licensed under the GNU Affero General Public License v3 (see [LICENSE](LICENSE)). The optional private server from [android-sms-gateway/server](https://github.com/android-sms-gateway/server) is Apache-2.0; this tree does not vendor that server.
+
+Self-hosted mode does not use Firebase. The design is in [docs/godesk-sms-architecture.md](docs/godesk-sms-architecture.md). The httpSMS README continues below for the existing Firebase deployment.
+
+## GoDesk SMS self-hosted quickstart
+
+1. Copy the example env and replace every `change-me` value. `JWT_SECRET` must be at least 32 characters.
+
+```bash
+cp .env.example .env
+```
+
+2. Start the stack. Only Traefik publishes ports (80 and 443). Postgres and the API stay on the compose network.
+
+```bash
+docker compose -f docker-compose.selfhosted.yml up --build
+```
+
+3. Open the dashboard at the host in `GODESK_HOST` (the example is `http://godesk.localhost`). Sign up, then register one SMS Gateway for Android phone in **local server** mode:
+
+   - On the phone, turn on Local Server and start it.
+   - Copy the origin, username, and password into the device form. The origin is an `http` or `https` URL with no path, for example `https://phone.example:8080`.
+   - The API registers webhooks on the phone. `PUBLIC_URL` must be an address the phone can reach. The official app requires HTTPS except for `http://127.0.0.1`.
+
+4. Send a message with the dashboard or with the httpsms-shaped API:
+
+```bash
+curl -X POST "$PUBLIC_URL/v1/messages/send" \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: $API_KEY" \
+  -d '{"from":"+18005550199","to":"+18005550100","content":"hello"}'
+```
+
+`from` selects the registered device. Inbound SMS from the phone is delivered to webhooks subscribed to `message.phone.received`.
+
+Optional OIDC (Authentik): set `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, and `OIDC_REDIRECT_URL`. The redirect URL is `{PUBLIC_URL}/v1/auth/oidc/callback`. Leave `OIDC_ISSUER` empty to use email and password only.
+
+Run the unit tests from `selfhosted/`:
+
+```bash
+cd selfhosted && go test ./...
+```
+
 # httpSMS
 
 [![Web](https://github.com/NdoleStudio/httpsms/actions/workflows/web.yml/badge.svg)](https://github.com/NdoleStudio/httpsms/actions/workflows/web.yml)
